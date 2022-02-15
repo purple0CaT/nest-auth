@@ -1,27 +1,46 @@
+import { ForbiddenError } from '@casl/ability';
 import {
-  Controller,
-  Get,
-  Post,
   Body,
-  Patch,
-  Param,
+  Controller,
   Delete,
-  SetMetadata,
+  ForbiddenException,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
 } from '@nestjs/common';
-import { UsersService } from '../services//users.service';
+import { CheckAbilities } from 'src/ability/abilities.decorator';
+import { AbilitesGuard } from 'src/ability/abilities.guard';
+import { AbilityFactory, Action } from 'src/ability/ability.factory';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
-import { Role } from '../entities/role.enum';
-import { Roles } from './roles.decorator';
+import { User } from '../entities/user.entity';
+import { UsersService } from '../services//users.service';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private abilityFactory: AbilityFactory,
+  ) {}
 
   @Post()
-  @Roles(Role.ADMIN)
   create(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto);
+    const user = { id: 1, name: 'Ian', isAdmin: false, orgId: 22 };
+    const ability = this.abilityFactory.defineAbility(user); // Controll user
+    try {
+      ForbiddenError.from(ability).throwUnlessCan(Action.Create, User);
+      return this.usersService.create(createUserDto);
+    } catch (error) {
+      if (error instanceof ForbiddenError) {
+        throw new ForbiddenException(error.message);
+      }
+    }
+    // const isAllowed = ability.can(Action.Create, User);
+    // if (!isAllowed) {
+    //   throw new ForbiddenException('Only admin');
+    // }
   }
 
   @Get()
@@ -35,13 +54,13 @@ export class UsersController {
   }
 
   @Patch(':id')
-  @Roles(Role.ADMIN)
   update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    return this.usersService.update(+id, updateUserDto);
+    const user = { id: 1, name: 'Ian', isAdmin: true, orgId: 1 };
+    return this.usersService.update(+id, updateUserDto, user);
   }
 
   @Delete(':id')
-  @Roles(Role.ADMIN)
+  @CheckAbilities({ action: Action.Delete, subject: User })
   remove(@Param('id') id: string) {
     return this.usersService.remove(+id);
   }
